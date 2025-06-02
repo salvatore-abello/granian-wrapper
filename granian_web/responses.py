@@ -24,7 +24,7 @@ class StreamResponse(Response):
         status_code: int = 200,
         content_type: str = "application/octet-stream",
     ):
-        super().__init__(status_code, "STREAM")
+        super().__init__(status_code, "")
         self.body = body
         self.content_type = content_type
 

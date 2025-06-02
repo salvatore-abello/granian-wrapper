@@ -1,4 +1,4 @@
-from .wrapper import App
+from .wrapper import App, Context
 from .responses import (
     Response,
     PlainTextResponse,
@@ -12,6 +12,7 @@ from .util import parse_qs
 __version__ = "1.0.0"
 __all__ = [
     "App",
+    "Context",
     "Response",
     "PlainTextResponse", 
     "JSONResponse",

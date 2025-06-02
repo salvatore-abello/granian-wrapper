@@ -1,28 +1,25 @@
-from granian_web import App, PlainTextResponse, FileResponse, JSONResponse, parse_qs
+from granian_web import App, PlainTextResponse, FileResponse, JSONResponse
 
-app = App(__name__)
+app = App(__name__, debug=True)
 
-async def index(request, proto):
+async def index(context):
     return PlainTextResponse("Hello, World!")
 
-async def echo(request, proto):
-    args = await parse_qs(request.query_string)
+async def echo(context):
+    args = await context.args
 
     to_response = args.get("echo", "No echo parameter provided")
     return PlainTextResponse(to_response)
 
-async def send_file_test(request, proto):
+async def send_file_test(context):
     return FileResponse("test.txt", 200)
 
-async def serve_file(request, proto, file):
+async def serve_file(context, file):
     return PlainTextResponse(f"Serving static file: {file}", 200)
 
-async def get_body(request, proto):
-    body = b""
-    async for x in proto:
-        body += x
-
-    return PlainTextResponse(body)
+async def get_body(context):
+    body = await context.body
+    return JSONResponse(f"{body}")
 
 app.get("/", index)
 app.register("/echo", echo)

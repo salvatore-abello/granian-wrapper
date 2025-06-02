@@ -1,10 +1,36 @@
 import re
-import traceback
-import sys
 import logging
+import traceback
 from typing import Callable, Dict, List, Optional, Tuple, Any
 
 from .responses import Response, PlainTextResponse, FileResponse, StreamResponse
+from .util import parse_body, parse_qs
+
+
+class Context:
+    def __init__(self, request, proto):
+        self.request = request
+        self.proto = proto
+        self._body = None
+        self._args = None
+    
+    @property
+    async def body(self):
+        if self._body is None:
+            self._body = await anext(parse_body(self))
+        return self._body
+    
+    @property
+    async def args(self):
+        if self._args is None:
+            self._args = await anext(parse_qs(self))
+        return self._args
+
+    def __aiter__(self):
+        return self.proto.__aiter__()
+    
+    async def __anext__(self):
+        return await self.proto.__anext__()
 
 
 class ColoredFormatter(logging.Formatter):
@@ -23,7 +49,7 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 __version__ = "1.0.0"
-__all__ = ["App"]
+__all__ = ["App", "Context"]
 
 
 class App:
@@ -34,7 +60,6 @@ class App:
         self._parametric: List[Tuple[re.Pattern, str, Callable]] = []
         self._fallback: Optional[Tuple[str, Callable]] = None
         
-        # Setup logging
         self.logger = logging.getLogger(self.name)
         if enable_logging and not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -79,29 +104,29 @@ class App:
         self._log(f"Registered parametric route: {method} {path} -> {regex.pattern}", "DEBUG")
 
     async def handler(self, scope, proto):
+        # static routes -> parametric routes -> fallback
+
         path: str = scope.path
         method: str = scope.method.upper()
+        context = Context(scope, proto)
 
         try:
-            # Check static routes first
             func = self._static.get((path, method))
             if func is not None:
-                response = await func(scope, proto)
+                response = await func(context)
                 return response
 
-            # Check parametric routes
             for regex, mth, fn in self._parametric:
                 if mth != method:
                     continue
 
                 match = regex.match(path)
                 if match is not None:
-                    response = await fn(scope, proto, **match.groupdict())
+                    response = await fn(context, **match.groupdict())
                     return response
 
-            # Check fallback route
             if self._fallback and (self._fallback[0] == method or self._fallback[0] == "*"):
-                response = await self._fallback[1](scope, proto)
+                response = await self._fallback[1](context)
                 return response
 
             return PlainTextResponse("Not Found", 404)
@@ -114,7 +139,7 @@ class App:
     async def __call__(self, scope, proto):
         path: str = scope.path
         method: str = scope.method.upper()
-        status_code = 500  # Default to 500 in case of error
+        status_code = 500
         
         try:
             response = await self.handler(scope, proto)
